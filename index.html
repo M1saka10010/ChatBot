@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Chatbot</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
+</head>
+
+<body>
+    <div class="container py-5">
+        <div class="row">
+            <div class="col-md-6 offset-md-3">
+                <h1 class="text-center mb-4">Qwen1.5-0.5B-Chat</h1>
+                <div class="bg-light p-3 border rounded-3 shadow-lg">
+                    <div id="chatContainer" class="chat-container mb-3" style="height: 400px; overflow-y: auto;">
+                        <!-- Messages will be displayed here -->
+                    </div>
+                    <div id="loadingIndicator" class="text-center" style="display:none;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    <div class="input-group mb-3">
+                        <input type="text" id="userInput" class="form-control" placeholder="输入你的问题"
+                            onkeydown="handleKeyDown(event)">
+                        <button id="sendButton" class="btn btn-primary" type="button"
+                            onclick="sendMessage()">发送</button>
+                        <button id="clearButton" class="btn btn-secondary" type="button"
+                            onclick="clearMessages()">清空</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { env, pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers';
+
+        env.remoteHost = "https://hf-mirror.com";
+        env.allowLocalModels = false;
+
+        const chatContainer = document.getElementById('chatContainer');
+        const userInput = document.getElementById('userInput');
+        const sendButton = document.getElementById('sendButton');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        let chatGenerator;
+        let conversationHistory = JSON.parse(localStorage.getItem('conversationHistory')) || [];
+
+        async function initializeChat() {
+            displayLoading(true);
+            toggleInputDisabled(true);
+            chatGenerator = await pipeline('text-generation', 'Xenova/Qwen1.5-0.5B-Chat');
+            displayLoading(false);
+            toggleInputDisabled(false);
+            renderConversationHistory();
+        }
+
+        async function sendMessage() {
+            const inputText = userInput.value.trim();
+            if (!inputText) return;
+
+            const messageHtml = marked(inputText);
+            addMessageToChat('user', messageHtml);
+            conversationHistory.push({ role: 'user', content: messageHtml });
+            localStorage.setItem('conversationHistory', JSON.stringify(conversationHistory));
+            userInput.value = '';
+            toggleInputDisabled(true);
+            displayLoading(true);
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            const text = chatGenerator.tokenizer.apply_chat_template(conversationHistory, {
+                tokenize: false,
+                add_generation_prompt: true,
+            });
+
+            const output = await chatGenerator(text, {
+                max_new_tokens: 512,
+                do_sample: false,
+                return_full_text: false,
+            });
+
+            const outputHtml = marked(output[0].generated_text);
+            addMessageToChat('bot', outputHtml);
+            conversationHistory.push({ role: 'bot', content: outputHtml });
+            localStorage.setItem('conversationHistory', JSON.stringify(conversationHistory));
+            displayLoading(false);
+            toggleInputDisabled(false);
+        }
+
+        function addMessageToChat(sender, message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'text-wrap p-2 my-1 ' + (sender === 'user' ? 'bg-primary text-white' : 'bg-secondary text-white');
+            messageDiv.innerHTML = sender.toUpperCase() + ": " + message;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function renderConversationHistory() {
+            conversationHistory.forEach(entry => {
+                addMessageToChat(entry.role, entry.content);
+            });
+        }
+
+        function clearMessages() {
+            chatContainer.innerHTML = '';
+            conversationHistory = [];
+            localStorage.removeItem('conversationHistory');
+        }
+
+        function displayLoading(show) {
+            loadingIndicator.style.display = show ? 'block' : 'none';
+        }
+
+        function toggleInputDisabled(disabled) {
+            userInput.disabled = disabled;
+            sendButton.disabled = disabled;
+        }
+
+        function handleKeyDown(event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        window.handleKeyDown = handleKeyDown;
+        window.sendMessage = sendMessage;
+        window.clearMessages = clearMessages;
+        window.onload = initializeChat;
+    </script>
+
+</body>
+
+</html>
