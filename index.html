@@ -62,7 +62,7 @@
             const inputText = userInput.value.trim();
             if (!inputText) return;
 
-            const messageHtml = marked(inputText);
+            const messageHtml = marked.parse(inputText);
             addMessageToChat('user', messageHtml);
             conversationHistory.push({ role: 'user', content: messageHtml });
             localStorage.setItem('conversationHistory', JSON.stringify(conversationHistory));
@@ -82,7 +82,7 @@
                 return_full_text: false,
             });
 
-            const outputHtml = marked(output[0].generated_text);
+            const outputHtml = marked.parse(output[0].generated_text);
             addMessageToChat('bot', outputHtml);
             conversationHistory.push({ role: 'bot', content: outputHtml });
             localStorage.setItem('conversationHistory', JSON.stringify(conversationHistory));
